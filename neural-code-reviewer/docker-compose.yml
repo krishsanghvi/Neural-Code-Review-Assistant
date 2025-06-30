@@ -1,0 +1,21 @@
+version: "3.8"
+
+services:
+  neural-code-reviewer:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - GITHUB_APP_ID=${GITHUB_APP_ID}
+      - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET}
+      - GITHUB_PRIVATE_KEY_CONTENT=${GITHUB_PRIVATE_KEY_CONTENT}
+      - ENVIRONMENT=production
+    volumes:
+      # Mount for local development (optional)
+      - ./app:/app/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

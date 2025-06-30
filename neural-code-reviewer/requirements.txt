@@ -3,5 +3,6 @@ uvicorn[standard]==0.24.0
 PyGithub==1.59.1
 cryptography==41.0.7
 python-dotenv==1.0.0
-pydantic==2.5.0
+pydantic==1.10.12
 python-multipart==0.0.6
+urllib3==1.26.18
