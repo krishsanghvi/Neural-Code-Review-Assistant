@@ -24,12 +24,11 @@ RUN useradd --create-home --shell /bin/bash app && \
 USER app
 
 # Expose port
-EXPOSE $PORT
+EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
 
-# Use Railway's recommended command format
-# Since your app is in app/main.py, use app.main:app
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port $PORT"]
+# Fixed CMD - use /bin/sh to properly expand $PORT
+CMD ["/bin/sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
