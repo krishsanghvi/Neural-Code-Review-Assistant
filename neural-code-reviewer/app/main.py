@@ -13,6 +13,17 @@ app = FastAPI(
 app.include_router(webhook_router, prefix="/webhooks", tags=["webhooks"])
 
 
+@app.on_event("startup")
+async def startup_event():
+    print("🚀 Neural Code Review Assistant Starting Up...")
+    print(f"📱 GitHub App ID: {settings.github_app_id}")
+    print(f"🔑 Private Key Path: {settings.github_private_key_path}")
+    print(
+        f"🔒 Webhook Secret Set: {'Yes' if settings.github_webhook_secret else 'No'}")
+    print(f"🌍 Environment: {settings.environment}")
+    print("=" * 50)
+
+
 @app.get("/")
 async def root():
     return {
