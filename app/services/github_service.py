@@ -16,11 +16,9 @@ class GitHubService:
         self.app_id = settings.github_app_id
         self.private_key = settings.github_private_key
 
-        # Debug: Print key info (remove in production)
+        # Debug info
         print(f"🔑 GitHub App ID: {self.app_id}")
         print(f"🔑 Private key loaded: {'Yes' if self.private_key else 'No'}")
-        print(
-            f"🔑 Key length: {len(self.private_key)} characters" if self.private_key else "🔑 No key content")
 
         # Initialize all AI components
         print("🚀 Initializing AI Components...")
@@ -34,7 +32,7 @@ class GitHubService:
             self.ai_analyzer = None
 
         try:
-            # Smart code analyzer (fallback)
+            # Smart code analyzer (secondary)
             self.code_analyzer = SmartCodeAnalyzer()
             print("✅ Smart code analyzer ready")
         except Exception as e:
@@ -58,14 +56,12 @@ class GitHubService:
 
         # Create JWT for GitHub App authentication
         payload = {
-            'iat': int(time.time()) - 60,  # Issued at time
-            # Expiration time (10 minutes)
+            'iat': int(time.time()) - 60,
             'exp': int(time.time()) + (10 * 60),
-            'iss': self.app_id  # Issuer
+            'iss': self.app_id
         }
 
         try:
-            # Create JWT token
             jwt_token = jwt.encode(
                 payload, self.private_key, algorithm='RS256')
             print(f"🎫 JWT token created successfully")
@@ -83,7 +79,6 @@ class GitHubService:
         try:
             response = requests.post(url, headers=headers)
             response.raise_for_status()
-            print(f"✅ Installation access token obtained")
             return response.json()['token']
         except Exception as e:
             print(f"❌ Failed to get installation token: {e}")
@@ -143,7 +138,7 @@ I encountered an issue while analyzing this PR. The development team has been no
 
                 pr.create_issue_comment(error_comment)
             except:
-                pass  # If we can't even post an error comment, just log it
+                pass
 
             raise
 
@@ -170,12 +165,13 @@ I encountered an issue while analyzing this PR. The development team has been no
 
         # Determine available analysis modes
         if self.ai_analyzer and self.ai_analyzer.is_ai_available():
-            analysis['analysis_modes'].append('lightweight_ai')
-        if self.code_analyzer and hasattr(self.code_analyzer, 'is_heavy_ai_available'):
-            if self.code_analyzer.is_heavy_ai_available():
-                analysis['analysis_modes'].append('heavy_ai')
-            else:
-                analysis['analysis_modes'].append('smart_heuristics')
+            if self.ai_analyzer.is_transformer_available():
+                analysis['analysis_modes'].append('lightweight_transformers')
+            analysis['analysis_modes'].append('tfidf_analysis')
+
+        if self.code_analyzer:
+            analysis['analysis_modes'].append('smart_heuristics')
+
         if self.security_scanner:
             analysis['analysis_modes'].append('security_scanning')
 
@@ -216,7 +212,7 @@ I encountered an issue while analyzing this PR. The development team has been no
                 'risk_score': 0
             }
 
-            # AI Analysis (Primary)
+            # AI Analysis (Primary - New!)
             if self.ai_analyzer and self.ai_analyzer.is_ai_available():
                 try:
                     print(f"🤖 AI analyzing {file.filename}...")
@@ -251,8 +247,7 @@ I encountered an issue while analyzing this PR. The development team has been no
                         file.patch)
                     analysis['complexity_analysis'][file.filename] = complexity
                     file_analysis['complexity'] = complexity
-                    total_quality_score += (10 - complexity.get('score',
-                                            complexity.get('complexity_score', 5)))
+                    total_quality_score += (10 - complexity.get('score', 5))
 
                 except Exception as e:
                     print(f"⚠️ Smart analysis failed for {file.filename}: {e}")
@@ -291,15 +286,6 @@ I encountered an issue while analyzing this PR. The development team has been no
                 }
                 analysis['suggestions'].append(suggestion)
 
-            if file.deletions > 50 and file.additions < 10:
-                suggestion = {
-                    'type': 'cleanup',
-                    'severity': 'info',
-                    'message': f'Significant code removal in {file.filename}. Ensure no breaking changes.',
-                    'filename': file.filename
-                }
-                analysis['suggestions'].append(suggestion)
-
             # Store file analysis
             analysis['file_analysis'][file.filename] = file_analysis
 
@@ -312,31 +298,14 @@ I encountered an issue while analyzing this PR. The development team has been no
         security_risk = len(
             [v for v in analysis['security_vulnerabilities'] if v['severity'] == 'high']) * 3
         complexity_risk = len([c for c in analysis['complexity_analysis'].values()
-                              if c.get('score', c.get('complexity_score', 0)) > 7]) * 2
+                              if c.get('score', 0) > 7]) * 2
         size_risk = 1 if analysis['total_additions'] > 500 else 0
 
         analysis['overall_risk_score'] = min(
             10, security_risk + complexity_risk + size_risk)
 
-        # Generate PR-level suggestions
-        if len(analysis['languages']) > 3:
-            analysis['suggestions'].append({
-                'type': 'architecture',
-                'severity': 'info',
-                'message': f'PR touches {len(analysis["languages"])} different languages. Consider splitting by technology.',
-                'filename': 'PR-level'
-            })
-
-        if analysis['files_changed'] > 20:
-            analysis['suggestions'].append({
-                'type': 'scope',
-                'severity': 'warning',
-                'message': f'Large PR with {analysis["files_changed"]} files. Consider breaking into smaller, focused PRs.',
-                'filename': 'PR-level'
-            })
-
         print(f"✅ Comprehensive analysis complete:")
-        print(f"   🔍 {len(analysis['ai_insights'])} AI insights")
+        print(f"   🤖 {len(analysis['ai_insights'])} AI insights")
         print(f"   🧠 {len(analysis['smart_insights'])} smart insights")
         print(
             f"   🔒 {len(analysis['security_vulnerabilities'])} security issues")
@@ -348,52 +317,19 @@ I encountered an issue while analyzing this PR. The development team has been no
     def _detect_language(self, filename: str, file_ext: str) -> str:
         """Detect programming language from filename"""
         language_map = {
-            'py': 'Python',
-            'js': 'JavaScript',
-            'jsx': 'JavaScript',
-            'ts': 'TypeScript',
-            'tsx': 'TypeScript',
-            'java': 'Java',
-            'cpp': 'C++',
-            'c': 'C',
-            'h': 'C/C++',
-            'hpp': 'C++',
-            'cs': 'C#',
-            'php': 'PHP',
-            'rb': 'Ruby',
-            'go': 'Go',
-            'rs': 'Rust',
-            'kt': 'Kotlin',
-            'swift': 'Swift',
-            'scala': 'Scala',
-            'sh': 'Shell',
-            'bash': 'Shell',
-            'sql': 'SQL',
-            'html': 'HTML',
-            'css': 'CSS',
-            'scss': 'SCSS',
-            'less': 'LESS',
-            'vue': 'Vue',
-            'svelte': 'Svelte',
-            'dart': 'Dart',
-            'r': 'R',
-            'matlab': 'MATLAB',
-            'm': 'MATLAB'
+            'py': 'Python', 'js': 'JavaScript', 'jsx': 'JavaScript',
+            'ts': 'TypeScript', 'tsx': 'TypeScript', 'java': 'Java',
+            'cpp': 'C++', 'c': 'C', 'h': 'C/C++', 'cs': 'C#',
+            'php': 'PHP', 'rb': 'Ruby', 'go': 'Go', 'rs': 'Rust',
+            'kt': 'Kotlin', 'swift': 'Swift', 'sql': 'SQL'
         }
-
         return language_map.get(file_ext, 'Unknown')
 
     def _is_binary_file(self, filename: str) -> bool:
         """Check if file is likely binary"""
         binary_extensions = {
-            'jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'ico',
-            'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
-            'zip', 'tar', 'gz', 'rar', '7z',
-            'mp3', 'mp4', 'avi', 'mov', 'wav',
-            'exe', 'dll', 'so', 'dylib',
-            'woff', 'woff2', 'ttf', 'eot'
+            'jpg', 'jpeg', 'png', 'gif', 'pdf', 'zip', 'mp3', 'mp4', 'exe'
         }
-
         file_ext = filename.split('.')[-1].lower() if '.' in filename else ''
         return file_ext in binary_extensions
 
@@ -404,8 +340,8 @@ I encountered an issue while analyzing this PR. The development team has been no
         # Analysis mode indicator
         modes = analysis.get('analysis_modes', [])
         mode_emojis = {
-            'lightweight_ai': '🧠',
-            'heavy_ai': '🚀',
+            'lightweight_transformers': '🧠',
+            'tfidf_analysis': '📊',
             'smart_heuristics': '⚡',
             'security_scanning': '🔒'
         }
@@ -414,26 +350,21 @@ I encountered an issue while analyzing this PR. The development team has been no
         comment += f"*Analysis powered by: {mode_display}*\n\n"
 
         # Executive Summary
-        comment += f"## 📊 Executive Summary\n\n"
-
-        # Risk assessment
         risk_score = analysis.get('overall_risk_score', 0)
         if risk_score >= 7:
-            risk_emoji = "🔴"
-            risk_level = "High Risk"
+            risk_emoji, risk_level = "🔴", "High Risk"
         elif risk_score >= 4:
-            risk_emoji = "🟡"
-            risk_level = "Medium Risk"
+            risk_emoji, risk_level = "🟡", "Medium Risk"
         else:
-            risk_emoji = "🟢"
-            risk_level = "Low Risk"
+            risk_emoji, risk_level = "🟢", "Low Risk"
 
+        comment += f"## 📊 Executive Summary\n\n"
         comment += f"**{risk_emoji} Overall Risk: {risk_level} ({risk_score}/10)**\n\n"
 
         # Key metrics
         comment += f"**📈 Key Metrics:**\n"
         comment += f"- Files analyzed: {analysis['files_changed']}\n"
-        comment += f"- Languages: {', '.join(sorted(analysis['languages'])) if analysis['languages'] else 'Mixed/Unknown'}\n"
+        comment += f"- Languages: {', '.join(sorted(analysis['languages'])) if analysis['languages'] else 'Mixed'}\n"
         comment += f"- Changes: +{analysis['total_additions']} / -{analysis['total_deletions']} lines\n"
 
         if analysis['code_quality_score'] > 0:
@@ -447,104 +378,89 @@ I encountered an issue while analyzing this PR. The development team has been no
         if security_vulns:
             comment += "## 🚨 Security Analysis\n\n"
 
-            # Group by severity
             high_vulns = [v for v in security_vulns if v['severity'] == 'high']
             medium_vulns = [
                 v for v in security_vulns if v['severity'] == 'medium']
-            low_vulns = [v for v in security_vulns if v['severity'] == 'low']
 
             if high_vulns:
                 comment += "### 🔴 Critical Issues (Immediate Action Required)\n"
-                for vuln in high_vulns[:3]:  # Limit to avoid overwhelming
+                for vuln in high_vulns[:3]:
                     comment += f"- **{vuln['description']}** in `{vuln['filename']}`"
                     if 'line' in vuln:
                         comment += f" (line {vuln['line']})"
                     comment += f"\n  💡 *{vuln['recommendation']}*\n"
-                if len(high_vulns) > 3:
-                    comment += f"  *...and {len(high_vulns) - 3} more critical issues*\n"
                 comment += "\n"
 
             if medium_vulns:
                 comment += "### 🟡 Medium Priority Issues\n"
                 for vuln in medium_vulns[:2]:
                     comment += f"- {vuln['description']} in `{vuln['filename']}`\n"
-                if len(medium_vulns) > 2:
-                    comment += f"  *...and {len(medium_vulns) - 2} more medium issues*\n"
                 comment += "\n"
 
-            if low_vulns and len(high_vulns) == 0:
-                comment += "### 🟢 Low Priority Issues\n"
-                comment += f"- {len(low_vulns)} minor security considerations found\n\n"
-
-        # AI Insights
+        # AI Insights (New!)
         ai_insights = analysis.get('ai_insights', [])
         smart_insights = analysis.get('smart_insights', [])
-        all_insights = ai_insights + smart_insights
 
-        if all_insights:
-            comment += "## 🧠 Intelligence Analysis\n\n"
+        if ai_insights:
+            comment += "## 🧠 AI Intelligence Analysis\n\n"
 
-            # Group insights by type and severity
-            complexity_insights = [i for i in all_insights if i['type'] in [
-                'complexity', 'ai_complexity']]
-            pattern_insights = [i for i in all_insights if i['type'] in [
-                'pattern', 'pattern_similarity', 'quality_patterns']]
-            maintainability_insights = [
-                i for i in all_insights if i['type'] in ['maintainability', 'code_smell']]
+            # Group AI insights by type
+            ai_complexity = [
+                i for i in ai_insights if 'complexity' in i['type']]
+            ai_patterns = [i for i in ai_insights if 'pattern' in i['type']]
+            ai_semantic = [i for i in ai_insights if 'semantic' in i['type']]
+
+            if ai_complexity:
+                comment += "### ⚡ AI Complexity Analysis\n"
+                for insight in ai_complexity[:2]:
+                    comment += f"- {insight['message']}\n"
+                comment += "\n"
+
+            if ai_patterns:
+                comment += "### 🔍 AI Pattern Recognition\n"
+                for insight in ai_patterns[:2]:
+                    comment += f"- {insight['message']}\n"
+                comment += "\n"
+
+        # Smart Insights
+        if smart_insights:
+            comment += "## ⚡ Smart Analysis\n\n"
+
+            complexity_insights = [
+                i for i in smart_insights if i['type'] == 'complexity']
+            pattern_insights = [
+                i for i in smart_insights if i['type'] == 'pattern']
 
             if complexity_insights:
-                comment += "### ⚡ Complexity & Performance\n"
-                for insight in complexity_insights[:3]:
-                    severity_emoji = {"warning": "⚠️", "info": "ℹ️", "error": "❌"}.get(
-                        insight['severity'], "🔍")
-                    comment += f"- {severity_emoji} {insight['message']}"
-                    if 'filename' in insight:
-                        comment += f" (`{insight['filename']}`)"
-                    comment += "\n"
+                comment += "### 🧮 Complexity & Performance\n"
+                for insight in complexity_insights[:2]:
+                    comment += f"- {insight['message']}\n"
                 comment += "\n"
 
             if pattern_insights:
-                comment += "### 🔍 Code Patterns & Quality\n"
+                comment += "### 🔍 Code Patterns\n"
                 for insight in pattern_insights[:3]:
-                    severity_emoji = {"warning": "⚠️", "info": "ℹ️", "error": "❌"}.get(
-                        insight['severity'], "🔍")
-                    comment += f"- {severity_emoji} {insight['message']}\n"
-                comment += "\n"
-
-            if maintainability_insights:
-                comment += "### 🛠️ Maintainability\n"
-                for insight in maintainability_insights[:2]:
-                    severity_emoji = {"warning": "⚠️", "info": "ℹ️", "error": "❌"}.get(
-                        insight['severity'], "🔍")
-                    comment += f"- {severity_emoji} {insight['message']}\n"
+                    comment += f"- {insight['message']}\n"
                 comment += "\n"
 
         # Suggestions
         suggestions = analysis.get('suggestions', [])
         if suggestions:
             comment += "## 💡 Recommendations\n\n"
-            for suggestion in suggestions[:4]:  # Limit suggestions
-                severity_emoji = {"warning": "⚠️", "info": "💡",
-                                  "error": "❌"}.get(suggestion['severity'], "💡")
-                comment += f"- {severity_emoji} {suggestion['message']}\n"
+            for suggestion in suggestions[:3]:
+                comment += f"- 💡 {suggestion['message']}\n"
             comment += "\n"
 
         # Positive feedback for good code
-        if (risk_score <= 3 and
-            len(security_vulns) == 0 and
-                analysis.get('code_quality_score', 0) >= 7):
+        if (risk_score <= 3 and len(security_vulns) == 0 and analysis.get('code_quality_score', 0) >= 7):
             comment += "## ✨ Excellent Work!\n\n"
-            comment += "This PR demonstrates high-quality code with:\n"
-            comment += "- ✅ No security issues detected\n"
-            comment += "- ✅ Good code quality patterns\n"
-            comment += "- ✅ Appropriate complexity levels\n"
-            comment += "\nKeep up the outstanding work! 🎉\n\n"
+            comment += "This PR demonstrates high-quality code with excellent patterns and no security concerns. Keep up the outstanding work! 🎉\n\n"
 
-        # Footer with stats
+        # Footer
         comment += "---\n"
         total_insights = len(ai_insights) + len(smart_insights)
-        comment += f"*🤖 Analysis complete: {total_insights} insights, {len(security_vulns)} security checks, {len(analysis['files_changed'])} files reviewed*\n"
-        comment += f"*⚡ Powered by Neural Code Review Assistant ({', '.join(modes)})*"
+        comment += f"*🤖 Analysis complete: {total_insights} insights, {len(security_vulns)} security checks*\n"
+        comment += f"*⚡ Powered by Neural Code Review Assistant*"
 
         return comment
 
