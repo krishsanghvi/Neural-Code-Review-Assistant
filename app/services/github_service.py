@@ -12,7 +12,83 @@ from app.core.performance_monitor import performance_monitor
 
 
 class GitHubService:
-    # ... (keep existing __init__ and other methods)
+    def __init__(self):
+        """Initialize GitHub service with all AI components"""
+        self.app_id = settings.github_app_id
+        self.private_key = settings.github_private_key
+
+        # Debug info
+        print(f"🔑 GitHub App ID: {self.app_id}")
+        print(f"🔑 Private key loaded: {'Yes' if self.private_key else 'No'}")
+
+        # Initialize all AI components
+        print("🚀 Initializing AI Components...")
+
+        try:
+            # Lightweight AI analyzer (primary)
+            self.ai_analyzer = LightweightAIAnalyzer()
+            print("✅ Lightweight AI analyzer ready")
+        except Exception as e:
+            print(f"⚠️ Lightweight AI failed: {e}")
+            self.ai_analyzer = None
+
+        try:
+            # Smart code analyzer (secondary)
+            self.code_analyzer = SmartCodeAnalyzer()
+            print("✅ Smart code analyzer ready")
+        except Exception as e:
+            print(f"⚠️ Smart analyzer failed: {e}")
+            self.code_analyzer = None
+
+        try:
+            # Security scanner (always available)
+            self.security_scanner = AdvancedSecurityScanner()
+            print("✅ Security scanner ready")
+        except Exception as e:
+            print(f"⚠️ Security scanner failed: {e}")
+            self.security_scanner = None
+
+        print("🎉 All analyzers initialized!")
+
+    def get_installation_access_token(self, installation_id: int) -> str:
+        """Get access token for a specific installation"""
+        if not self.private_key:
+            raise ValueError("GitHub private key not found!")
+
+        # Create JWT for GitHub App authentication
+        payload = {
+            'iat': int(time.time()) - 60,
+            'exp': int(time.time()) + (10 * 60),
+            'iss': self.app_id
+        }
+
+        try:
+            jwt_token = jwt.encode(
+                payload, self.private_key, algorithm='RS256')
+            print(f"🎫 JWT token created successfully")
+        except Exception as e:
+            print(f"❌ Failed to create JWT token: {e}")
+            raise
+
+        # Get installation access token
+        headers = {
+            'Authorization': f'Bearer {jwt_token}',
+            'Accept': 'application/vnd.github.v3+json'
+        }
+
+        url = f'https://api.github.com/app/installations/{installation_id}/access_tokens'
+        try:
+            response = requests.post(url, headers=headers)
+            response.raise_for_status()
+            return response.json()['token']
+        except Exception as e:
+            print(f"❌ Failed to get installation token: {e}")
+            raise
+
+    def get_github_client(self, installation_id: int) -> Github:
+        """Get authenticated GitHub client for installation"""
+        access_token = self.get_installation_access_token(installation_id)
+        return Github(access_token)
 
     def analyze_and_comment_on_pr(self, installation_id: int, repo_name: str, pr_number: int):
         """Main function to analyze PR and post comment with performance tracking"""
@@ -63,7 +139,30 @@ class GitHubService:
             performance_monitor.record_error()
             print(f"❌ Error in analysis: {str(e)}")
 
-            # ... (keep existing error handling)
+            # Post a simple error comment instead of failing silently
+            try:
+                github_client = self.get_github_client(installation_id)
+                repo = github_client.get_repo(repo_name)
+                pr = repo.get_pull(pr_number)
+
+                error_comment = f"""## 🤖 AI Code Review Assistant
+
+⚠️ **Analysis temporarily unavailable**
+
+I encountered an issue while analyzing this PR. The development team has been notified.
+
+**What you can do:**
+- Check back in a few minutes
+- Ensure your changes follow coding best practices
+- Run local tests before pushing
+
+---
+*🔧 Error ID: {str(e)[:50]}...*"""
+
+                pr.create_issue_comment(error_comment)
+            except:
+                pass
+
             raise
 
     def _analyze_pr_changes_comprehensive(self, files: List[Any]) -> Dict[str, Any]:
@@ -91,7 +190,17 @@ class GitHubService:
             }
         }
 
-        # ... (keep existing analysis mode detection)
+        # Determine available analysis modes
+        if self.ai_analyzer and self.ai_analyzer.is_ai_available():
+            if self.ai_analyzer.is_transformer_available():
+                analysis['analysis_modes'].append('lightweight_transformers')
+            analysis['analysis_modes'].append('tfidf_analysis')
+
+        if self.code_analyzer:
+            analysis['analysis_modes'].append('smart_heuristics')
+
+        if self.security_scanner:
+            analysis['analysis_modes'].append('security_scanning')
 
         total_quality_score = 0
         analyzed_files = 0
@@ -102,8 +211,18 @@ class GitHubService:
             file_start_time = time.time()
             print(f"🔍 Analyzing {file.filename}...")
 
-            # ... (keep existing language detection and change counting)
+            # Language detection
+            file_ext = file.filename.split(
+                '.')[-1].lower() if '.' in file.filename else ''
+            language = self._detect_language(file.filename, file_ext)
+            if language:
+                analysis['languages'].add(language)
 
+            # Count changes
+            analysis['total_additions'] += file.additions
+            analysis['total_deletions'] += file.deletions
+
+            # Skip binary files, very large files, or files without patches
             if not file.patch or file.additions > 1000 or self._is_binary_file(file.filename):
                 print(
                     f"⏭️ Skipping {file.filename} (binary, too large, or no patch)")
@@ -126,12 +245,11 @@ class GitHubService:
                         analysis['performance_metrics']['cache_hits'] += 1
                         print(
                             f"  🎯 AI analysis: CACHE HIT ({ai_duration*1000:.1f}ms)")
+                        ai_insights = ai_result.get('insights', ai_result)
                     else:
                         analysis['performance_metrics']['cache_misses'] += 1
-                        if isinstance(ai_result, dict):
-                            ai_insights = ai_result.get('insights', ai_result)
-                        else:
-                            ai_insights = ai_result
+                        ai_insights = ai_result if isinstance(
+                            ai_result, list) else []
                         print(
                             f"  🧠 AI analysis: CACHE MISS ({ai_duration*1000:.1f}ms)")
 
@@ -233,16 +351,22 @@ class GitHubService:
                     analysis['security_vulnerabilities'].extend(
                         vulnerabilities)
 
-                    # Count high severity issues for risk assessment
-                    high_severity_count = len(
-                        [v for v in vulnerabilities if v.get('severity') == 'high'])
-
                     performance_monitor.record_analysis_time(
                         "security_analysis", security_duration)
 
                 except Exception as e:
                     print(
                         f"⚠️ Security analysis failed for {file.filename}: {e}")
+
+            # File-level suggestions
+            if file.additions > 100:
+                suggestion = {
+                    'type': 'maintainability',
+                    'severity': 'info',
+                    'message': f'Large change in {file.filename} ({file.additions} lines added). Consider breaking into smaller commits.',
+                    'filename': file.filename
+                }
+                analysis['suggestions'].append(suggestion)
 
             file_duration = time.time() - file_start_time
             print(f"  ✅ {file.filename} analyzed in {file_duration*1000:.1f}ms")
@@ -283,6 +407,27 @@ class GitHubService:
         print(f"   ⏱️ Total time: {total_analysis_duration*1000:.1f}ms")
 
         return analysis
+
+    def _detect_language(self, filename: str, file_ext: str) -> str:
+        """Detect programming language from filename"""
+        language_map = {
+            'py': 'Python', 'js': 'JavaScript', 'jsx': 'JavaScript',
+            'ts': 'TypeScript', 'tsx': 'TypeScript', 'java': 'Java',
+            'cpp': 'C++', 'c': 'C', 'h': 'C/C++', 'cs': 'C#',
+            'php': 'PHP', 'rb': 'Ruby', 'go': 'Go', 'rs': 'Rust',
+            'kt': 'Kotlin', 'swift': 'Swift', 'sql': 'SQL',
+            'html': 'HTML', 'css': 'CSS', 'scss': 'SCSS'
+        }
+        return language_map.get(file_ext, 'Unknown')
+
+    def _is_binary_file(self, filename: str) -> bool:
+        """Check if file is likely binary"""
+        binary_extensions = {
+            'jpg', 'jpeg', 'png', 'gif', 'pdf', 'zip', 'mp3', 'mp4', 'exe',
+            'dll', 'so', 'dylib', 'woff', 'woff2', 'ttf', 'eot'
+        }
+        file_ext = filename.split('.')[-1].lower() if '.' in filename else ''
+        return file_ext in binary_extensions
 
     def _generate_comprehensive_comment(self, analysis: Dict[str, Any]) -> str:
         """Generate comprehensive AI-powered PR comment with performance info"""
@@ -332,8 +477,6 @@ class GitHubService:
             comment += f"- Code quality: {quality_emoji} {analysis['code_quality_score']}/10\n"
 
         comment += "\n"
-
-        # ... (keep all existing comment sections for security, AI insights, etc.)
 
         # Security Issues (Highest Priority)
         security_vulns = analysis.get('security_vulnerabilities', [])
