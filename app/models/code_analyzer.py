@@ -3,15 +3,15 @@ import ast
 import logging
 import os
 from typing import List, Dict, Optional, Tuple
+from app.core.cache_manager import cached_analysis
 
 logger = logging.getLogger(__name__)
 
 
 class SmartCodeAnalyzer:
-    """Smart code analyzer optimized for resource constraints"""
+    """Smart code analyzer with caching support"""
 
     def __init__(self):
-        """Initialize with lightweight mode for Railway/Render free tier"""
         self.use_heavy_ai = os.getenv(
             "USE_HEAVY_AI", "false").lower() == "true"
 
@@ -21,13 +21,16 @@ class SmartCodeAnalyzer:
             print("🚀 Using smart heuristics mode (resource-optimized)")
 
     def is_heavy_ai_available(self) -> bool:
-        return False  # Always false for free tier compatibility
+        return False
 
+    @cached_analysis("smart_quality")
     def analyze_code_quality(self, code: str, filename: str = "") -> List[Dict]:
-        """Smart analysis - lightweight but intelligent"""
+        """Smart analysis with caching"""
         insights = []
 
         try:
+            print(f"⚡ Running smart analysis for {filename} (cache miss)")
+
             # Smart complexity analysis
             complexity = self._calculate_smart_complexity(code)
 
@@ -74,45 +77,12 @@ class SmartCodeAnalyzer:
 
         return insights
 
-    def _calculate_smart_complexity(self, code: str) -> Dict:
-        """Calculate complexity without heavy dependencies"""
-        lines = [line.strip() for line in code.split('\n') if line.strip()]
+    @cached_analysis("complexity_calculation")
+    def calculate_complexity_score(self, code: str) -> Dict:
+        """Calculate complexity with caching"""
+        return self._calculate_smart_complexity(code)
 
-        # Count complexity indicators
-        complexity_indicators = [
-            'if ', 'elif ', 'else:', 'while ', 'for ', 'try:', 'except:',
-            'def ', 'class ', 'with ', 'match ', 'case ', 'lambda'
-        ]
-
-        complexity_score = 1  # Base complexity
-        nesting_depth = 0
-        max_nesting = 0
-
-        for line in lines:
-            # Count indentation for nesting (assuming 4 spaces)
-            indent_level = (len(line) - len(line.lstrip())) // 4
-            nesting_depth = max(nesting_depth, indent_level)
-            max_nesting = max(max_nesting, indent_level)
-
-            # Count complexity keywords
-            for indicator in complexity_indicators:
-                if indicator in line.lower():
-                    complexity_score += 1
-
-        # Adjust score based on length and nesting
-        length_penalty = len(lines) / 20
-        nesting_penalty = max_nesting * 0.5
-        final_score = min(10, complexity_score +
-                          length_penalty + nesting_penalty)
-
-        return {
-            'score': round(final_score, 1),
-            'lines_of_code': len(lines),
-            'nesting_depth': max_nesting,
-            'complexity_indicators': complexity_score,
-            'method': 'smart_heuristics'
-        }
-
+    # ... (keep all other existing methods unchanged)
     def _analyze_smart_patterns(self, code: str, filename: str) -> List[Dict]:
         """Smart pattern analysis without heavy models"""
         insights = []

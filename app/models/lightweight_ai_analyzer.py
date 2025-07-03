@@ -6,12 +6,13 @@ import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import hashlib
+from app.core.cache_manager import cached_analysis, cache_manager
 
 logger = logging.getLogger(__name__)
 
 
 class LightweightAIAnalyzer:
-    """Lightweight AI analyzer that works on Render free tier"""
+    """Lightweight AI analyzer with smart caching"""
 
     def __init__(self):
         self.use_transformers = os.getenv(
@@ -19,7 +20,7 @@ class LightweightAIAnalyzer:
         self.model = None
         self.tokenizer = None
 
-        # Always available: TF-IDF based analysis
+        # Initialize TF-IDF vectorizer
         try:
             self.tfidf_vectorizer = TfidfVectorizer(
                 max_features=1000,
@@ -31,7 +32,7 @@ class LightweightAIAnalyzer:
             print(f"⚠️ TF-IDF initialization failed: {e}")
             self.tfidf_vectorizer = None
 
-        # Code pattern database (lightweight knowledge base)
+        # Load code patterns
         self.code_patterns = self._load_code_patterns()
 
         if self.use_transformers:
@@ -135,11 +136,14 @@ class LightweightAIAnalyzer:
             ]
         }
 
+    @cached_analysis("ai_intelligence")
     def analyze_code_intelligence(self, code: str, filename: str = "") -> List[Dict]:
-        """Main AI analysis method"""
+        """Main AI analysis method with caching"""
         insights = []
 
         try:
+            print(f"🧠 Running AI analysis for {filename} (cache miss)")
+
             # Method 1: Transformer-based analysis (if available)
             if self.is_transformer_available():
                 transformer_insights = self._analyze_with_transformers(
@@ -165,7 +169,6 @@ class LightweightAIAnalyzer:
 
         except Exception as e:
             logger.error(f"Error in AI analysis: {e}")
-            # Return at least basic analysis
             insights.append({
                 'type': 'analysis_error',
                 'severity': 'info',
